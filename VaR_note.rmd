@@ -1,0 +1,96 @@
+---
+title: "VaR_note"
+author: "xx"
+date: "January 12, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+load_data = function(){
+      dir = "/home/xx/Desktop/money/seb/data"
+      files = c( 'SEB-TEKN.txt','SEB-USINDEULUU.txt','SEB-SVEINDEX.txt')
+      data = data.frame()
+      for(file in files){
+        raw = read.table(file = paste0(dir,'/', file),sep = '\t', dec = '.')
+        names(raw) = c('date','value')
+        raw$date = as.Date(raw$date,format = "%Y-%m-%d")
+        raw$fund = sub(".txt","",file)
+        s = mean(raw$value)
+        raw$number = raw$value/s;
+        data = rbind(data,raw)
+        cat(file,length(raw$date),"\n")
+      }
+      return(data)
+}
+
+raw = load_data()
+library(ggplot2)
+ln_return = function(x){
+  len = length(x)
+  y = log(x[2:len]/x[1:(len-1)])
+  return(y)
+}
+
+
+hi_fund = function(raw){
+  funds = unique(raw[,'fund'])
+  z = data.frame()
+  zs = data.frame()
+  for(fds in funds){
+    a = raw[raw$fund == fds,]
+    y = ln_return(a[,'value'])
+    k = data.frame(date = a[-1,1],funds = fds,ret = y)
+    z = rbind(z,k)
+    s = data.frame(funds = fds,avr_return = round(250*mean(y),digits = 3), volatility = round(sqrt(250)*sd(y),digits = 3))
+    zs = rbind(zs,s)
+  }
+  result = list(d_return = z, y_sum = zs)
+}
+```
+
+
+```{r fig.width=10,fig.height=4}
+fund_data = raw
+p = ggplot(data = fund_data) + 
+    geom_line(aes(x = date, y =number,group = fund,color = fund))# + 
+ #   facet_grid(fund~., scales="free_y")
+print(p)
+```
+
+```{r fig.width=10,fig.height=3}
+hi = hi_fund(fund_data)
+ps=ggplot()+geom_histogram(data = hi$d_return, aes(x = ret,fill =funds), binwidth = 0.002)+facet_wrap(~funds)
+print(ps)
+
+```
+
+## Empirical VaR
+
+```{r}
+hi$d_return%>%group_by(funds)%>% summarise(VaR = quantile(ret,probs =0.05)) -> VaR5
+hi$d_return%>%group_by(funds)%>% summarise(VaR = quantile(ret,probs =0.03)) -> VaR3
+hi$d_return%>%group_by(funds)%>% summarise(VaR = quantile(ret,probs =0.01)) -> VaR1
+
+VaRs = left_join(VaR5,VaR3,by = "funds")
+VaRs = as.data.frame(left_join(VaRs,VaR1,by = "funds"))
+names(VaRs) = c("funds","VaR_5%","VaR_3%","VaR_1%")
+print(VaRs,digits = 3)
+```
+
+## Parametric VaR (logNormal distribution assumed)
+
+```{r}
+hi$d_return%>%group_by(funds)%>% summarise(Mu = mean(ret)) -> R_mean
+hi$d_return%>%group_by(funds)%>% summarise(S = sd(ret)) -> R_sd
+
+LN = left_join(R_mean,R_sd,by = "funds")
+LN = LN %>% mutate(VaR5 = qnorm(0.05,mean = Mu, sd = S),VaR3 = qnorm(0.03,mean = Mu, sd = S),VaR1 = qnorm(0.01,mean = Mu, sd = S))
+print(as.data.frame(LN),digits = 3)
+```
+
+

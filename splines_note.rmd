@@ -1,0 +1,285 @@
+---
+title: "splines"
+author: "surecalois"
+date: "1/15/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(splines)
+library(tidyverse)
+library(RColorBrewer)
+
+```
+
+# Basis functions, they are just a transfer of the $X$ to something else
+```{r, fig.align='center'}
+#x transfer to different "splines"
+xf = seq(0,1,0.01)
+
+z = poly(xf,degree = 5)
+gdata = data.frame(x = xf,z) %>% gather(key = "key",value = "y", -1)
+p = ggplot(data = gdata) +geom_path(aes(x = x, y = y,color = key))
+print(p)
+
+z = poly(xf,degree = 5,raw = T)
+gdata = data.frame(x = xf,z) %>% gather(key = "key",value = "y", -1)
+p = ggplot(data = gdata) +geom_path(aes(x = x, y = y,color = key))
+print(p)
+
+z = ns(xf,df = 7)
+gdata = data.frame(x = xf,z) %>% gather(key = "key",value = "y", -1)
+p = ggplot(data = gdata) +geom_path(aes(x = x, y = y,color = key))
+print(p)
+
+z = bs(xf,df = 7)
+gdata = data.frame(x = xf,z) %>% gather(key = "key",value = "y", -1)
+p = ggplot(data = gdata) +geom_path(aes(x = x, y = y,color = key))
+print(p)
+
+```
+
+# this is the function we are going to fit
+```{r, fig.align='center'}
+xf = seq(0,1,0.01)
+yf = log(xf*20+1)
+
+x = seq(0,1,0.1)
+y = log(x*20+1)
+
+#plot(xf,yf,type = 'l')
+#points(x,y,col = "red")
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+```
+
+# the piecewise polynomial representation
+```{r, fig.align='center'}
+
+h = interpSpline(y~x)
+coefs = h$coefficients
+
+pk = length(h$knots)-1
+gdata = data.frame(x = xf, y = yf , key = 0)
+for(i in 1:pk){
+  xk = seq(h$knots[i],h$knots[i+1],0.01)
+  yk = h$coefficients[i,1] + poly(xk-h$knots[i],degree = splineOrder(h)-1,raw = T) %*% h$coefficients[i,2:splineOrder(h)]
+  #lines(xk,yk,col = colors[i])
+  gdata = rbind(gdata,data.frame(x = xk, y  = yk, key = i))
+}
+p = ggplot() +
+  geom_line(data = gdata,aes(x = x, y = y,color = factor(key)))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))+
+  scale_color_manual(values = c("grey",brewer.pal(pk,"Paired")))
+print(p)
+```
+
+# extend the region to see the tails
+```{r, fig.align='center'}
+
+gdata = data.frame(x = xf, y = yf , key = 0)
+for(i in 1:pk){
+  ex = (h$knots[i+1] - h$knots[i])*5
+  xk = seq(h$knots[i],h$knots[i+1]+ex,0.01)
+  yk = h$coefficients[i,1] + poly(xk-h$knots[i],degree = splineOrder(h)-1,raw = T) %*% h$coefficients[i,2:splineOrder(h)]
+  #lines(xk,yk,col = colors[i])
+  gdata = rbind(gdata,data.frame(x = xk, y  = yk, key = i))
+}
+p = ggplot() +
+  geom_line(data = gdata,aes(x = x, y = y,color = factor(key)))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))+
+  ylim(0,4)+
+  scale_color_manual(values = c("grey",brewer.pal(pk,"Paired")))
+print(p)
+```
+
+# the b-spline representation
+```{r, fig.align='center'}
+hb = interpSpline(y~x,bSpline = T)
+
+z = bs(xf,knots = splineKnots(hb),
+       degree = hb$order-1,
+       Boundary.knots =attr(hb,"Boundary.knots"),
+       intercept = T)
+
+yz = z %*% hb$coefficients
+
+#plot(xf,yz,type = 'l')
+#points(x,y,col = 'red')
+#lines(xf,yf,lty = 4)
+
+yzs = z %*% diag(hb$coefficients)
+gdata = data.frame(yzs) %>% mutate(x = xf,s = rowSums(yzs)) %>% gather(key = "key",value = "y", -c("x"))
+#p = ggplot(data = gdata) +geom_path(aes(x = x, y = y,color = key))
+p = ggplot() +
+    geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+    geom_path(data = gdata,aes(x = x, y = y,color = key))+
+    geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+```
+
+# Some manually fit examples, not good fits.
+```{r,fig.align='center'}
+xf = seq(0,1,0.01)
+yf = log(xf*20+1)
+
+x = seq(0,1,0.1)
+y = log(x*20+1)
+
+d = 8
+z = poly(x,degree = d)
+m = lm(y ~z)
+cf = coef(m)
+newdata = poly(xf,degree = d,coefs = attr(z,"coefs"))
+#yh = newdata %*% cf[2:6] + cf[1]
+yhs = newdata %*% diag(cf[2:(d+1)])
+yhs = cbind(cf[1],yhs)
+gdata = data.frame(yhs) %>% mutate(x = xf,s = rowSums(yhs)) %>% gather(key = "key",value = "y", -c("x"))
+p = ggplot() +
+    geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+    geom_path(data = gdata,aes(x = x, y = y,color = key))+
+    geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+
+
+d = 8
+z = ns(x,df = d)
+m = lm(y ~ z)
+cf = coef(m)
+newdata = ns(xf,df = d)
+#yh = newdata %*% cf[2:6] + cf[1]
+yhs = newdata %*% diag(cf[2:(d+1)])
+yhs = cbind(cf[1],yhs)
+gdata = data.frame(yhs) %>% mutate(x = xf,s = rowSums(yhs)) %>% gather(key = "key",value = "y", -c("x"))
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_path(data = gdata,aes(x = x, y = y,color = key))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+
+d = 8
+z = bs(x,df = d)
+m = lm(y ~ z)
+cf = coef(m)
+newdata = bs(xf,df = d)
+#yh = newdata %*% cf[2:6] + cf[1]
+yhs = newdata %*% diag(cf[2:(d+1)])
+yhs = cbind(cf[1],yhs)
+gdata = data.frame(yhs) %>% mutate(x = xf,s = rowSums(yhs)) %>% gather(key = "key",value = "y", -c("x"))
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_path(data = gdata,aes(x = x, y = y,color = key))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+
+
+hb = interpSpline(y~x,bSpline = T)
+z = bs(x,knots = splineKnots(hb),
+       degree = hb$order-1,
+       Boundary.knots =attr(hb,"Boundary.knots"),
+       intercept = T)
+#m = lm(y~ 0 + z) #
+coef.m = ginv(z) %*% y
+
+newdata = bs(xf,knots = splineKnots(hb),
+       degree = hb$order-1,
+       Boundary.knots =attr(hb,"Boundary.knots"),
+       intercept = T)
+
+yzs = newdata %*% diag(coef.m[,1])
+gdata = data.frame(yzs) %>% mutate(x = xf,s = rowSums(yzs)) %>% gather(key = "key",value = "y", -c("x"))
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_path(data = gdata,aes(x = x, y = y,color = key))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+```
+
+```{r fig.align='center'}
+
+f = function(xf){
+  xf - 0.1*xf^2 + sin(xf)
+}
+
+xf = seq(-3,6,0.02)
+yf = f(xf)
+
+x = seq(-3,6,1)
+y = f(x)
+
+p = ggplot() + geom_path(data = data.frame(x = xf, y = yf),aes(x= x, y = y))+
+    geom_point(data = data.frame(x = x, y = y),aes(x = x,y = y))
+print(p)
+
+hb = interpSpline(y~x,bSpline = T)
+
+z = bs(xf,knots = splineKnots(hb),
+       degree = hb$order-1,
+       Boundary.knots =attr(hb,"Boundary.knots"),
+       intercept = T)
+
+#yz = z %*% hb$coefficients
+
+yzs = z %*% diag(hb$coefficients)
+gdata = data.frame(yzs) %>% mutate(x = xf,s = rowSums(yzs)) %>% gather(key = "key",value = "y", -c("x"))
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_path(data = gdata,aes(x = x, y = y,color = key))+
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))
+print(p)
+
+xs = seq(-3,6,0.1)
+zs = bs(xs,knots = splineKnots(hb),
+       degree = hb$order-1,
+       Boundary.knots =attr(hb,"Boundary.knots"),
+       intercept = T)
+yzs = zs %*% diag(hb$coefficients)
+
+k = dim(yzs)[2]
+gdata = data.frame(yzs) %>% mutate(x = xs) %>% gather(key = "key",value = "y", -c("x"))
+gdata$key = factor(gdata$key,levels = paste0("X",seq(1,k)))
+
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_col(data = gdata,aes(x = x, y = y,fill = key)) +
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))+
+  scale_fill_brewer(palette = "Paired")
+print(p)
+
+
+cumsum.m = matrix(rep(0,k^2),ncol = k)
+cumsum.m[upper.tri(cumsum.m,diag= T)] = 1
+cumsum.m = apply(cumsum.m,2,rev)
+ind = yzs > 0
+
+yzs.p = yzs *0
+yzs.p[ind] = yzs[ind]
+yzs.n = yzs * 0
+yzs.n[!ind] = yzs[!ind]
+
+yzs.c.p = yzs.p %*% cumsum.m
+yzs.c.n = yzs.n %*% cumsum.m
+
+
+gdata.c.p = data.frame(yzs.c.p) %>% mutate(x = xs) %>% gather(key = "key",value = "y", -c("x"))
+gdata.c.n = data.frame(yzs.c.n) %>% mutate(x = xs) %>% gather(key = "key",value = "y", -c("x"))
+gdata.c.p$key = factor(gdata.c.p$key,levels = paste0("X",seq(1,k)))
+gdata.c.n$key = factor(gdata.c.n$key,levels = paste0("X",seq(1,k)))
+
+p = ggplot() +
+  geom_path(data = data.frame(x = xf,y = yf),aes(x = x,y = y),linetype = "dashed")+
+  geom_col(data = gdata,aes(x = x, y = y,fill = key)) +
+  geom_path(data = gdata.c.p,aes(x = x, y = y,color = key)) +
+  geom_path(data = gdata.c.n,aes(x = x, y = y,color = key)) +
+  geom_point(data = data.frame(x = x,y = y),aes(x = x,y = y))+
+  scale_fill_brewer(palette = "Paired")+scale_color_brewer(palette = "Paired")
+print(p)
+
+```
+

@@ -1,0 +1,107 @@
+---
+title: "p-value distributions"
+author: "surecalois"
+date: "12/25/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# p-value distribution
+
+```{r}
+make_some_t2w = function(x,nx,y,ny){
+  X = sample(x,nx)
+  Y = sample(y,ny)
+  tt = t.test(X,Y)
+  return(list(t = tt$statistic, df = tt$parameter,p = tt$p.value))
+}
+
+N = 5e3
+bk = 100
+
+mx = 3
+sx = 1
+my = 5
+sy = 2
+
+x = rnorm(N,mx,sx)
+y = rnorm(N,my,sy)
+
+  nx = 5
+  ny = 7
+  
+test_them = function(x,y){
+  txw = matrix(nrow = N,ncol = 3)
+  for(i in 1:N){
+    sth = make_some_t2w(x,nx,y,ny)
+    txw[i,1] = sth$t
+    txw[i,2] = sth$df
+    txw[i,3] = sth$p
+  }
+  
+  hx = hist(txw[,1],breaks = bk,probability = T)
+  points(hx$mids,dt(hx$mids,df = max(txw[,2])),type = "l",lwd = 2,col = "green")
+  points(hx$mids,dt(hx$mids,df = mean(txw[,2])),type = "l",col = "red")
+  points(hx$mids,dt(hx$mids,df = min(txw[,2])),type = "l",col = "brown")
+  points(hx$mids,dnorm(hx$mids),type = "l",col = "blue")
+  
+  hp = hist(txw[,3],breaks = bk)
+  abline(v = 0.05,lty= 2, col = "red")
+  return(txw)
+}
+```
+
+## some cases
+```{r}
+mstr = "BH" #"fdr"=="BH"
+pbk = seq(-1e-3,1,length.out = 100)
+# the samples are from pretty much the same populations
+txw.same = test_them(x,x+0.1*runif(1))
+p.adj = p.adjust(txw.same[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+
+# the samples are from different populations
+txw.same.left = test_them(x,x+2)
+p.adj = p.adjust(txw.same.left[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+
+# the samples are from different populations
+txw.same.right = test_them(x,x-2)
+p = pt(txw.same.right[,1],txw.same.right[,2])
+hist(p,breaks = bk)
+p.adj = p.adjust(txw.same.right[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+
+# the samples are from different populations
+txw.diff = test_them(x,y)
+p.adj = p.adjust(txw.diff[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+
+# the samples are from different populations
+K = round(0.3*N)
+z = c(sample(x,N-K),sample(y,K))
+txw.mix = test_them(x,z)
+p.adj = p.adjust(txw.mix[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+K = round(0.8*N)
+z = c(sample(x,N-K),sample(y,K))
+txw.mix = test_them(x,z)
+p.adj = p.adjust(txw.mix[,3],method =mstr)
+hist(p.adj, breaks = pbk)
+  abline(v = 0.05,lty= 2, col = "red")
+
+```
+

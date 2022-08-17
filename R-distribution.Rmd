@@ -1,0 +1,409 @@
+---
+title: "distributions and their application"
+author: "surecalois"
+date: "12/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Binomial Distribution:dbinom
+This is conventionally interpreted as the number of ‘successes’ in `size` trials. the key feature for this distribution is two outcomes, and their respective probability is constant during these trials. 
+
+3 and 5 are defined as success (p = 1/3), others as failure (q = 1-p = 2/3). roll the die for 100 times, what is the number of success?
+```{r}
+n = 100
+x = seq(1,n)
+p = dbinom(x,n,1/3)
+plot(x,p)
+print(sum(x*p))
+```
+
+# Hypergeometric Distribution:dhyper
+this distribution has a horrible name, it just the n choose k type of calculation problem. there are two types of objects `m` and `n` of them. take out `k`. the probability of `x` out of the `k` are from the m-type. `dhyper(x,m,n,k)`.
+
+a certain union chapter has 32 male and 26 female members. An important committee of 7 people needs to be struck. the distribution of the number of women on the committee.
+```{r}
+x = 0:7
+p = dhyper(x,26,32,7)
+plot(x,p)
+p.cal = choose(26,6)*choose(32,1)/choose(32+26,7)
+print(c(p[7],p.cal))
+```
+
+Poz can draw 7 cards from the deck. 2 cards has been draw already, they are both diamonds. what is the chance of a flush (5 common cards are the same suit!)
+```{r}
+n = 4*13
+h = 2
+p1 = dhyper(3,13-h,n-h,5)
+p2 = dhyper(5,13,n-h,5)
+p = p1 + 3*p2
+print(c(p1,p2,p))
+```
+
+There are 1e6 cells in a population, and take 20 of them for analysis. it turns out 2 of them are abnormal. then how many abnormal cells in the population.
+
+_this question is a bit different, but very similar. `dhyper(x,m,n,k)` still works, just varies the `m` instead of `x`._ 
+
+```{r}
+N = 1e6
+n = 20
+k = 2
+K = seq(0,N,N/100)
+P = choose(K,k)*choose(N-K,n-k)/choose(N,n)
+#p = dhyper(x,m,n,k) = choose(m,x)*choose(n,k-x)/choose(m+n,k)
+#p = dhyper(x = k,m = K,n = N-K,k = n)
+p = dhyper(2,K,N-K,20)
+plot(K,P)
+points(K,p,pch = "+",col = "blue")
+```
+
+
+# negative binomial distribution:dnbinom.
+`dnbinom(x,s,p)` represents the number of failures:`x` which occur in a sequence of Bernoulli trials before a target number of successes:`s` is reached.
+
+Pat Collis is required to sell candy bars to raise money for the 6th grade field trip. There are thirty houses in the neighborhood, and Pat is not supposed to return home until five candy bars have been sold. So the child goes door to door, selling candy bars. At each house, there is a 0.6 probability of selling one candy bar and a 0.4 probability of selling nothing.
+
+What's the probability of selling the last candy bar at the n-th house? `dnbinom(n-5,5,0.6)`
+
+
+```{r}
+n = 30
+x = 1:n
+
+pat = function(n){
+  return(choose(n-1,n-5)*(1-0.4)^5*0.4^(n-5))
+}
+
+plot(x,pat(x))
+
+p = dnbinom(x-5,5,0.6) #after 5 success, the thing stops.
+points(x,p,pch="+",col = "blue")
+```
+
+sometimes, this model is used purely because it has larger variance than the Poisson distribution. some the parameter usually is the `mean` and dispersion. Combined, these parameter also give the variance. when the dispersion or `size` vanish the enlarge variance effect, it converts to Poisson.
+
+alternative parametrization `dnbinom(x,mu = mean, size = 1/dispersion)`, the probobility is $size/(size+mu)$, the variance is $mu + mu^2/size$.
+
+use mean and variance
+```{r}
+m = 20
+a = 0.1
+x = 0:100
+p = dnbinom(x,mu = m, size = 1/a)
+plot(x,p,ylim = c(0,0.1))
+
+
+p = dpois(x,m)
+points(x,p,pch = "+",col = "red")
+
+p = dnbinom(x,mu = m, size = 2/a)
+points(x,p,pch = "o",type = "l",col = "lightblue")
+p = dnbinom(x,mu = m, size = 100/a)
+points(x,p,pch = "o",type = "l",col = "blue")
+```
+
+
+try some data sampling
+```{r}
+m = 20
+a = 0.1
+N = 3e4
+
+x = rnbinom(N,size = 1/a,mu = m)
+ms = mean(x)
+vs = var(x)
+as = (vs-ms)/ms^2
+print(c(m,ms,a,as))
+
+z = 0:max(x)
+hx = hist(x,breaks = z,probability = T,ylim = c(0,0.1))
+points(z,dnbinom(z,mu = ms, size = 1/as),type = "l",col = "red")
+points(z,dpois(z,ms),type = "l",col = "lightblue",lty=2)
+points(z,dnorm(z,mean = ms, sd = sqrt(vs)),type = "l",lty=2,col = "brown")
+```
+
+# Geometric Distribution:dgeom
+this distribution is not Exponential distribution. It is still discrete distribution. And the sum of this distribution give rise to the binomial distribution. this distribution characterize the number of draw before the first success.
+
+In a large population of adults, 5% have received CPR training. If adults from this population are randomly selected, what is the probability that the 6th person sampled is the first that has received CPR training?
+
+```{r}
+N = 5e3
+p = 0.05
+x = rgeom(N,p)
+z = -1:max(x)
+hx = hist(x,breaks = z,probability = T)
+px = dgeom(0:max(x),p)
+points(hx$mids,px,type = "l",lwd = 2,col = "red")
+
+```
+
+
+
+# Exponential Distribution:dexp
+the usual interpretation of this distribution is how long it takes for something to happen. if the average time is T, then the `rate` is 1/T. for `n` events to happen, the total time follows the __gamma__ distribution. And if an interval is set, `s` seconds, the number of happened event $N(s)$ follows the __Poisson__ distribution, with the expecting count $s/T$ or duration $\times$ rate. 
+
+Another property is to consider several threads, and pick the first finished one. The average time should be shorter, or the rate would be bigger. And it turns out for the $min(t_1,t_2,\cdots,t_n)$ has rate $\lambda_1+\lambda_2+\cdots+\lambda_n$. 
+
+```{r}
+N = 5e3
+x = rexp(N,rate = 2)
+plot(x)
+hx = hist(x,breaks = 100,probability = T)
+mx = mean(x)
+print(mx)
+z = hx$mids
+points(z,dexp(z,rate = 1/mx),pch = "o",col = "red")
+
+y = rexp(N,rate = 3)
+my = mean(y)
+
+w = pmin(x,y)
+hx = hist(w,breaks = 100,probability = T)
+mw = mean(w)
+print(mw)
+z = hx$mids
+points(z,dexp(z,rate = 1/mx+1/my),pch = "o",col = "red")
+
+k = 5
+w = 0;
+for(i in 1:k){
+  w = w + rexp(N,rate = 2)
+}
+hx = hist(w,breaks = 100,probability = T)
+mw = mean(w)
+print(mw)
+z = hx$mids
+points(z,dgamma(z,shape = k, rate = 2),pch = "o",col = "red")
+
+r = 2
+s = 12.3
+k = 100
+w = rexp(1*N*k,rate = 2)
+Tp = matrix(data = w, ncol = k)
+Tz = apply(Tp,1,cumsum)
+Ns = apply(Tz<s,2,sum) #count how many events within s (sec)
+cn = max(Ns)
+z = 1:cn
+hx = hist(Ns,breaks = 0.5+cn,probability = T,xlim = c(0,cn))
+points(z-0.5,dpois(z,lambda = r*s),pch = "o",col = "red")
+
+```
+
+
+
+
+# Poisson Distribution:dpois
+
+```{r}
+N = 5e3
+x = rpois(N,2)
+y = rpois(N,5)
+w = rpois(N,7)
+z =x + y+w
+cn = max(z)
+hz = hist(z,breaks = 0.5+cn,probability = T,xlim = c(0,cn))
+p = dpois(1:cn,2+5+7)
+points(1:cn - 0.5,p,col = "red")
+
+
+
+```
+
+
+
+
+# Chi-square distribution:dchisq
+$Z_k$ from $N(0,1)$
+$$
+\chi_k^2 = Z_1^2+Z_2^2+\cdots+Z_k^2
+$$
+
+```{r}
+N = 5e3
+bk = 50
+x = rnorm(N,0,1)
+y = x^2
+hx = hist(y,breaks = bk,probability = T,right = FALSE)
+p = dchisq(hx$mids,1)
+points(hx$mids,p,col = "red")
+
+k = 13
+y = 0
+for(i in 1:k){
+x = rnorm(N,0,1)
+y = y + x^2
+}
+hx = hist(y,breaks = bk,probability = T)
+p = dchisq(hx$mids,k)
+points(hx$mids,p,col = "red")
+
+```
+
+# F-distribution:df
+$Z_k$ from $N(0,1)$
+
+$$
+F_{n,m} = \frac{(Z_1^2+Z_2^2+\cdots+Z_n^2)/n}{(Z_1^2+Z_2^2+\cdots+Z_m^2)/m}
+$$
+
+```{r}
+N = 5e3
+bk = 50
+
+ka = 70
+a = 0
+for(i in 1:ka){
+x = rnorm(N,0,1)
+a = a + x^2
+}
+
+kb = 20 #it is in the denominator, it is better to make sure b is bigger to control the boundary of y
+b = 0
+for(i in 1:kb){
+x = rnorm(N,0,1)
+b = b + x^2
+}
+
+y = (a/ka) / (b/kb)
+
+hx = hist(y,breaks = bk,probability = T)
+p = df(hx$mids,ka,kb)
+points(hx$mids,p,col = "red")
+
+
+```
+
+# t-distribution:dt
+
+$$
+t = \frac{\bar X-\mu}{s/\sqrt n}
+$$
+
+```{r,fig.width=10}
+N = 5e3
+bk = 100
+n = 5
+m = 7.2 #the population mean is 7.2
+
+x = rnorm(N,m,2)
+hx = hist(x,breaks = bk,probability = T)
+
+make_some_t = function(x,n,m){
+  X = sample(x,n)
+  sx = sd(X)
+  mx = mean(X)
+  tX = (mx - m)/(sx/sqrt(n))
+  return(tX)
+}
+
+
+tx = c()
+for(i in 1:N){
+  tx[i] = make_some_t(x,n,m)
+}
+
+hx = hist(tx,breaks = bk,probability = T)
+points(hx$mids,dt(hx$mids,n-1),col = "red")
+points(hx$mids,dnorm(hx$mids),type = "l",col = "blue")
+
+
+#y = rnorm(round(N*(1-0.3*runif(1))),mean = m + runif(1),sd = 3+ runif(1))
+y = rnorm(N,m,3)
+
+make_some_t2 = function(x,nx,y,ny){
+  #this is the classic t
+  X = sample(x,nx)
+  vx = var(X)
+  mx = mean(X)
+  
+  Y = sample(y,ny)
+  vy = var(Y)
+  my = mean(Y)
+  
+  vv = ((nx-1)*vx + (ny-1)*vy)/(nx+ny-2)
+  
+  tX = (mx - my)/sqrt(vv/nx+vv/ny)
+  return(tX)
+}
+
+make_some_t2w = function(x,nx,y,ny){
+  #this is welch t
+  X = sample(x,nx)
+  vx = var(X)
+  mx = mean(X)
+  
+  Y = sample(y,ny)
+  vy = var(Y)
+  my = mean(Y)
+  
+  tX = (mx - my)/sqrt(vx/nx+vy/ny)
+  dfX = (vx/nx+vy/ny)/((vx/nx)^2/(ny-1)+(vy/ny)^2/(nx-1))
+  return(list(t = tX, df = dfX,p = pt(tX,dfX)))
+}
+
+tx = c()
+nx = 5
+ny = 7
+txw = matrix(nrow = N,ncol = 2)
+for(i in 1:N){
+  tx[i] = make_some_t2(x,nx,y,ny)
+  sth = make_some_t2w(x,nx,y,ny)
+  txw[i,1] = sth$t
+  txw[i,2] = sth$df
+}
+
+hx = hist(tx,breaks = bk,probability = T)
+points(hx$mids,dt(hx$mids,nx+ny-1),col = "red")
+points(hx$mids,dnorm(hx$mids),type = "l",col = "blue")
+
+# for the welch t, the t is not form the same distribution any way, it is meaningless.
+hx = hist(txw[,1],breaks = bk,probability = T)
+points(hx$mids,dt(hx$mids,df = max(txw[,2])),type = "l",lwd = 2,col = "green")
+points(hx$mids,dt(hx$mids,df = mean(txw[,2])),col = "red")
+points(hx$mids,dt(hx$mids,df = min(txw[,2])),type = "l",col = "brown")
+
+points(hx$mids,dnorm(hx$mids),type = "l",col = "blue")
+
+```
+
+
+
+# log-normal distribution:dlnorm.
+```{r}
+N = 5e3
+s = 0.2      #control the sd to small,so y is less likely to explode
+m = 7
+x = rnorm(N,m,s) 
+y = exp(x)
+bk.z = exp(qnorm(0.95,m,s))
+bk = 50
+bks = c(seq(0,bk.z,length = bk),max(y))
+hy = hist(y,breaks = bks,probability = T)
+p = dlnorm(hy$mids,m,s)
+points(hy$mids,p,col = "red")
+```
+
+
+# other-normal distribution:
+```{r}
+N = 5e3
+
+
+bk = 100
+s = 1
+m = 7 #control the mean to avoid log(x) to explode
+x = rnorm(N,m,s) 
+hy = hist(log(x),breaks = bk,probability = T)
+
+s = 1     
+m = 7 #control the mean to avoid 1/x to explode
+x = rnorm(N,m,s) 
+hy = hist(1/x,breaks = bk,probability = T)
+
+```
+

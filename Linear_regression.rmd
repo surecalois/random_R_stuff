@@ -1,0 +1,133 @@
+---
+title: "Linear Regression"
+author: "surecalois"
+date: "3/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1D example
+
+```{r}
+N = 100
+x = runif(N,max = 5)
+y = 0.5+1.3*x+0.2*rnorm(N,sd = 2)
+fit = lm(y~x)
+
+```
+
+## check the anova
+```{r}
+print(anova(fit))
+```
+
+
+\[
+\mathrm{SSR} = \sum_{i=1}^{n}(\hat{y}_i - \bar{y})^2
+\]
+\[
+\mathrm{SSE} = \sum_{i=1}^{n}(y_i - \hat{y}_i)^2
+\]
+
+
+```{r}
+y.m = mean(y)
+#sum of square due to x
+ssx = sum((fit$fitted.values-y.m)^2)
+#sum of square due to error
+sse = sum((fit$fitted.values-y)^2)
+
+#F-value
+f = (ssx/1)/(sse/98)
+cat("ssx = ",ssx,"\t","sse = ",sse,"\t", "f = ",f,"\n")
+```
+
+## parameters
+```{r}
+print(summary(fit))
+```
+\[
+\mathrm{std.error} = \sqrt{\frac{SSE}{df_{sse}}}
+\]
+```{r}
+print(sqrt(sse/(N-2)))
+```
+
+\[
+\hat{\beta} \sim \mathcal{N}(\beta,\sigma^2(X^TX)^{-1})
+\]
+
+```{r}
+K = 5000
+#xs are the same, ys are random due to error term
+b = coef(fit)
+ers = sum(fit$residuals^2)
+for(i in 1:K){
+  y = 0.5+1.3*x+0.2*rnorm(N,sd = 2)
+  fit = lm(y~x)
+  tmp = coef(fit)
+  b = rbind(b,tmp)
+  ers = c(ers,sum(fit$residuals^2))
+}
+
+plot(b)
+print(colMeans(b))
+
+ax = as.matrix(data.frame(a = rep(1,N), x = x))
+xtx = t(ax)%*%ax
+
+#the standard error from error term
+vm = 2^2*solve(xtx)
+print(vm)
+
+#there is coefficient in front of the error term, shift it to the parameters
+pv = cov(b)/0.2^2
+print(pv)
+
+```
+\[
+\mathbb{E}[\mathrm{SSE}] = \sigma^2(n-p)
+\]
+
+\[
+\hat{\sigma}^2 = \frac{1}{n-p}\mathrm{SSE}
+\]
+
+\[
+(n-p)\frac{\hat{\sigma}^2}{\sigma^2} \sim \chi_{n-p}^2
+\]
+
+```{r}
+# again, shift the coefficient of the error term to the 
+print(mean(ers)/0.2^2)
+print(4*(N-2))
+
+ers.n = ers/(0.2^2*(N-2))
+ers.chi = ers.n/4*(N-2)
+ec = hist(ers.chi,breaks = 100,probability = T)
+points(ec$mids,dchisq(ec$mids,N-2),col = 'red')
+
+```
+
+\[
+\frac{\hat{\beta}_j - \beta_j}{\sqrt{\gamma_j}} \sim t_{n-p} \quad \gamma_j = \sigma^2[(X^TX)^{-1}]_{jj}
+\]
+
+```{r}
+bt = b/0.2 #0.2 is error term coefficient, 2 is error term sd
+
+b1.t = hist((bt[,1]-mean(bt[,1]))/sd(bt[,1]),breaks = 100,probability = T)
+points(b1.t$mids,dt(b1.t$mids,N-2),col = "red")
+
+b2.t = hist((bt[,2]-mean(bt[,2]))/sd(bt[,2]),breaks = 100,probability = T)
+points(b2.t$mids,dt(b2.t$mids,N-2),col = "red")
+
+```
+
+
+
+
+

@@ -1,0 +1,375 @@
+---
+title: "finance tree"
+author: "surecalois"
+date: "1/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# simulating how interest rate (forward rate) change
+
+simulating one possible rate changes, at each period, the rate might go either up or down. the amount of up or down is controled by paramter `d`.
+
+```{r}
+
+simple.rate = function(n,d = 0.02){
+  ch = sample(c(1,-1),n,replace = T) #equal chance going up and down
+  r.m = c(1,exp(d*cumsum(ch)))
+  return(r.m)
+}
+
+r.m = 0.06*simple.rate(30)
+plot(r.m)
+lines(r.m)
+
+prob.rate = function(n,d = 0.02,p = 0.5){
+  h = c(-1,1)
+  x = runif(n) > (1-p)
+  ch = h[x+1]
+  #ch = sample(c(1,-1),n,replace = T) #equal chance going up and down
+  r.m = c(1,exp(d*cumsum(ch)))
+  return(r.m)
+}
+
+r.m = 0.06*prob.rate(30,p = 0.56)
+plot(r.m)
+lines(r.m)
+
+```
+
+
+```{r}
+
+show_rate = function(r.m){
+  r.m$t = 0:(length(r.m[[1]])-1)
+  gr.m = gather(r.m, key = "key",value = "rate",-t)
+  p = ggplot(data = gr.m) + geom_path(aes(x = t,y = rate, color = key))+
+    scale_y_continuous(trans='log10')+
+    theme(legend.position = "none")
+  print(p)
+}
+
+term = 30
+trial = 1:200
+names(trial) = paste0("r",trial)
+r.m = map_dfc(trial,~0.06*prob.rate(term,0.05,0.55))
+show_rate(r.m)
+
+
+```
+
+```{r}
+var_loan = function(coupon,term,rate = rate, face = 100){
+  s = seq(0,term)
+  pvs = s
+  pvs[term+1] = face #after coupon payment
+  for(i in term:1){
+    pvs[i] = (coupon + pvs[i+1])/(1+rate[i])
+  }
+  names(pvs) = s
+  return(rev(pvs))
+}
+
+trial = 1:1000
+names(trial) = paste0("r",trial)
+term = 30
+r.m = map(trial,~0.08*prob.rate(term,0.16,0.5))
+
+a = map_dfr(r.m,~var_loan(9,term,rate = .x))
+y = a$`0`
+my = mean(y)
+sy = sd(y)
+hist(y,breaks = 30)
+abline(v = my,col = "red")
+abline(v=c(my-sy,my+sy),col = "red",lt = 4)
+```
+
+
+simulating the whole picture of interest rate change
+
+```{r}
+full.rate = function(term,d = 0.16){
+  
+  ff = function(k){
+    a = seq(0,k)
+    ch = a - rev(a)
+    return(exp(d*ch))
+  }
+  
+  s = 0:term
+  names(s) = s
+  rates = map(s,ff)
+  return(rates)
+}
+
+```
+
+some helper functions
+```{r}
+tidylist = function(r.m){
+  x = names(r.m)
+  xs = map(x,~rep(.x,length(r.m[[.x]])))
+  pts.x = flatten_chr(xs)
+  pts.x = factor(pts.x,levels = x)
+  pts.y = flatten_dbl(r.m)
+  pts = data.frame(key = pts.x, value = pts.y)
+  return(pts)
+}
+
+make_fr.tree = function(r.m){
+ term = length(r.m)-1
+ pts = tidylist(r.m)
+ pts$key = as.numeric(pts$key)
+ names(pts)=c("x","y")
+ ind = seq(1,term+1)
+ edge1 = cumsum(ind) #depends on the full.rate put up first or down first
+ edge2 = edge1 - ind + 1
+ names(ind) = ind
+ maz = function(x,th){x[x>=th]}
+ gg1 = map(ind,~maz(edge1-.x+1,edge2))
+ miz = function(x,th){x[x<=th]}
+ gg2 = map(ind,~miz(edge2+.x-1,edge1))
+ 
+ # plot(pts,log = 'y')
+ # walk(gg2,~lines(pts[.x,],col = "blue"))
+ # walk(gg1,~lines(pts[.x,],col = "red"))
+
+ gg1.d= tidylist(gg1)
+ gg2.d= tidylist(gg2)
+ 
+ pts$gg1 = 0
+ pts[gg1.d$value,'gg1'] = gg1.d$key
+ pts$gg1 = factor(pts$gg1,levels = levels(gg1.d$key))
+ pts$gg2 = 0
+ pts[gg2.d$value,'gg2'] = gg2.d$key
+ pts$gg2 = factor(pts$gg2,levels = levels(gg2.d$key))
+ 
+ return(pts)
+}
+
+```
+
+```{r}
+r.m = full.rate(30)
+r.m = map(r.m,~0.06*.x)
+
+pts = make_fr.tree(r.m)
+
+p = ggplot(data = pts)+
+  geom_point(aes(x = x,y = y))+
+  geom_path(aes(x = x,y =y,group = gg1),color = "lightblue")+
+  geom_path(aes(x = x,y =y,group = gg2),color = "pink")+
+  scale_y_continuous(trans = 'log10')
+print(p)
+
+
+```
+
+
+to show the probability of the scenarios
+```{r}
+
+bf.tree = function(r.m,p){
+  szs = as.numeric(names(r.m))
+  names(szs) = names(r.m)
+  ps = map(szs,~dbinom(0:.x,.x,p))
+  return(ps)
+}
+
+ps = bf.tree(r.m,0.55)
+ps.d = tidylist(ps)
+names(ps.d) = c("x","p")
+pts$p = ps.d$p #left_join won't work because x is not unique.
+
+p = ggplot(data = pts)+
+  geom_point(aes(x = x,y = y,color = p))+
+  scale_color_continuous(type = "viridis")+
+  scale_y_continuous(trans = 'log10')
+print(p)
+
+pts = pts %>% group_by(x) %>% mutate(np = p/max(p))
+
+p = ggplot(data = pts)+
+  geom_point(aes(x = x,y = y,color = np))+
+  scale_color_continuous(type = "viridis")+
+  scale_y_continuous(trans = 'log10')
+print(p)
+```
+
+filter out the less likely scenarios
+```{r}
+p = ggplot(data = pts %>% filter(p > 0.05))+
+  geom_point(aes(x = x,y = y,color = np))+
+  scale_color_continuous(type = "viridis")+
+  scale_y_continuous(trans = 'log10',limits=c(1e-3, 1e1))
+print(p)
+
+```
+
+# how to value a cashflow
+
+two simple types of fixed rate cash flow
+
+ - coupon bond
+ - mortgage
+
+```{r}
+simple_bond = function(coupon,term,rate = 0.08, face = 100){
+  s = seq(0,term)
+  pvs = s
+  pvs[term+1] = face #after coupon payment
+  for(i in term:1){
+    pvs[i] = (coupon + pvs[i+1])/(1+rate)
+  }
+  names(pvs) = s
+  return(pvs)
+}
+
+
+mortgage = function(term,rate,amount=100){
+  s = (1+rate)^(1:term)
+  pay = amount/sum(1/s)
+  balance = rep(0,term+1)
+  for(i in term:1){
+    balance[i] = (pay + balance[i+1])/(1+rate)
+  }
+  names(balance) = seq(0,term)
+  pays = c(-amount,rep(pay,term))
+  names(pays) = seq(0,term)
+  return(list(payment = pays, balance = balance))
+}
+```
+
+```{r}
+z = mortgage(30,0.08,100)#30 year, 8%, 100
+mg.flow = z$payment
+print(z$balance)
+barplot(mg.flow)
+
+s = simple_bond(9,30,0.08,100)#9x30 year, 8%, 100
+sl.flow = c(-s[1],rep(9,30-1),109)
+barplot(sl.flow)
+```
+
+# some trees
+- interest rate tree
+  the middle nodes are fused together. the number of leaves grow linear with levels
+  the number of paths back to the root are those "binomial number".
+- interest rate path tree
+  each nodes has only one path back to the root.
+
+
+# the bookies and hedging
+
+```{r}
+binomial.tree = function(end.list,p){
+  term = length(end.list)-1
+  s = term:0
+  names(s) = s
+  pvs = list()
+  pvs[[as.character(term)]] = end.list
+  for(k in s[-1]){
+    a = pvs[[as.character(k+1)]]
+    b = p*a[1:(k+1)]+(1-p)*a[2:(k+2)]
+    pvs[[as.character(k)]] = b
+  }
+  return(rev(pvs))
+}
+
+pl = c(rep(100,4),rep(-100,4))
+bt = binomial.tree(pl,0.6)
+bt.d = make_fr.tree(bt)
+
+p = ggplot(data = bt.d)+
+  geom_path(aes(x = x,y =y,group =gg1),color = "lightblue")+
+  geom_path(aes(x = x,y =y,group =gg2),color = "pink")+
+  geom_point(aes(x = x,y = y))
+print(p)
+
+plot(tidylist(bt))
+
+a =  sum(dbinom(4:7,7,0.6))*100
+b = 100-a
+kip = a-b #case 1:1
+k = (100 -kip)/b #k = (100+kip)/a should give the same
+pl = c(rep(-b,4),rep(a,4))*k
+
+bt2 = binomial.tree(pl,0.6)
+bt2.d = make_fr.tree(bt2)
+
+p = ggplot(data = bt2.d)+
+  geom_path(aes(x = x,y =y,group =gg1),color = "lightblue")+
+  geom_path(aes(x = x,y =y,group =gg2),color = "pink")+
+  geom_point(aes(x = x,y = y))
+print(p)
+
+
+bt.d$g = 0
+bt2.d$g = 1
+bt3.d = bt.d
+bt3.d$g = 2
+bt3.d$y = bt.d$y+bt2.d$y
+data = rbind(bt.d,bt2.d,bt3.d)
+p = ggplot()+
+  geom_path(data = data,aes(x = x,y =y,group =gg1),color = "blue",linetype = "11")+
+  geom_path(data = data,aes(x = x,y =y,group =gg2),color = "red",linetype = "88")+
+  geom_point(data = data,aes(x = x,y = y))+facet_grid(g~.)
+print(p)
+
+```
+
+
+the two trees are identical, only the second one is flipped. when the `pl` at the end of the tree has the same geometry will result in the same tree geometry.
+
+```{r}
+
+pl =runif(8,min = -100,max = 100)
+pl = sort(pl)
+pl2 = 42 - pl
+bt1 = binomial.tree(pl,0.6)
+bt2 = binomial.tree(pl2,0.6)
+
+bt1.d = make_fr.tree(bt1)
+bt2.d = make_fr.tree(bt2)
+
+bt1.d$g = 0
+bt2.d$g = 1
+bt3.d = bt1.d
+bt3.d$g = 2
+bt3.d$y = bt1.d$y+bt2.d$y
+data = rbind(bt1.d,bt2.d,bt3.d)
+p = ggplot()+
+  geom_path(data = data,aes(x = x,y =y,group =gg1),color = "blue",linetype = "11")+
+  geom_path(data = data,aes(x = x,y =y,group =gg2),color = "red",linetype = "88")+
+  geom_point(data = data,aes(x = x,y = y))+facet_grid(g~.)
+print(p)
+```
+
+# imperfect hedging
+```{r}
+
+pl =runif(8,min = -100,max = 100)
+pl = sort(pl)
+pl2 = 42 - pl+rnorm(8,sd = 5)
+bt1 = binomial.tree(pl,0.6)
+bt2 = binomial.tree(pl2,0.6)
+
+bt1.d = make_fr.tree(bt1)
+bt2.d = make_fr.tree(bt2)
+
+bt1.d$g = 0
+bt2.d$g = 1
+bt3.d = bt1.d
+bt3.d$g = 2
+bt3.d$y = bt1.d$y+bt2.d$y
+data = rbind(bt1.d,bt2.d,bt3.d)
+p = ggplot()+
+  geom_path(data = data,aes(x = x,y =y,group =gg1),color = "blue",linetype = "11")+
+  geom_path(data = data,aes(x = x,y =y,group =gg2),color = "red",linetype = "88")+
+  geom_point(data = data,aes(x = x,y = y))+facet_grid(g~.)
+print(p)
+```

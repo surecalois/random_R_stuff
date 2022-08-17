@@ -1,0 +1,110 @@
+---
+title: "Markowitz Mean-Variance Portfolio Theory"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Covariance
+```{r}
+#the covariance
+n = 5e3
+x = rnorm(n,2,5)
+y = rnorm(n,1,1)
+# two independent variables
+xy0 = matrix(c(x,y),ncol = 2)
+cov(xy0)
+plot(xy0,asp = 1)
+```
+
+
+
+```{r}
+#add some rotation
+a = pi/6
+Tm = matrix(c(cos(a),sin(a),-sin(a),cos(a)),ncol = 2)
+#xy = Tm %*% matrix(c(x,y),nrow = 2,byrow = T)
+xy = xy0 %*% t(Tm) #the center is also changed
+plot(xy,asp = 1)
+```
+
+
+
+```{r}
+#try to reverse the rotation with PCA
+xy.p = prcomp(xy)
+#cov(xy) should equal \[u^T \Sigma u\], u^T
+
+#the following two should be close
+cov(xy)
+xy.p$rotation %*% cov(xy0) %*% t(xy.p$rotation)
+
+#the following two should be close
+cov(xy0)
+t(xy.p$rotation) %*% cov(xy) %*% xy.p$rotation
+
+
+#steps for generating random variable based on covariance matrix
+xy.e = eigen(cov(xy))
+k = length(xy.e$values)
+u = matrix(rep(0,n*k),ncol = k)
+for(i in 1:k){
+  u[,i] = rnorm(n,sd = sqrt(xy.e$values[i]))
+}
+xy1 = u %*% t(xy.e$vectors)
+plot(xy1,asp = 1)
+```
+
+
+# 2 funds
+```{r}
+ret = c(0.2,0.14)
+vol = c(0.3,0.2)
+rho = 0.9
+n = 1e3
+rhom =  matrix(c(1,rho,rho,1),ncol = 2)
+s = matrix(outer(vol,vol)*rhom,ncol = length(vol))
+
+t = seq(-2,1,0.02)
+sp =0.9#s[1,2] #vol[2]/vol[1]#vol[1]/vol[2]#
+r = ret[1]*t + ret[2]*(1-t)
+v = sqrt(vol[1]^2*t^2 + vol[2]^2*(1-t)^2+2*t*(1-t)*sp*vol[1]*vol[2])
+plot(v,r,type = 'l')
+#v1^2*t - v2^2*(1-t) + (1-2*t)*v1*v2*s = 0 => (v1^2+v2^2-2*v1*v2*s)*t+v1*v2*s-v2^2 = 0
+mv.p.t = (-sp*vol[1]*vol[2]+vol[2]^2)/(vol[1]^2+vol[2]^2-2*sp*vol[1]*vol[2])
+print(mv.p.t)
+mv.r = ret[1]*mv.p.t + ret[2]*(1-mv.p.t)
+mv.v = sqrt(vol[1]^2*mv.p.t^2 + vol[2]^2*(1-mv.p.t)^2+2*mv.p.t*(1-mv.p.t)*sp*vol[1]*vol[2])
+
+points(mv.v,mv.r,pch = 3, col = "red")
+points(vol,ret,pch = 3,col = "blue")
+
+#set a sp = 1 case => t = vol[2]/(vol[2]-vol[1]), 1-t = -vol[1]/(vol[2]-vol[1])
+x = rnorm(n,ret[1],vol[1])
+y = vol[2]/vol[1]*(x - ret[1]) + ret[2]
+plot(x,y)
+cov(matrix(c(x,y),ncol = 2))
+cor(matrix(c(x,y),ncol = 2))
+u = -vol[2]*x + vol[1]*y # lock in -vol[2]*x + vol[1]*y 
+#sp = -1 => t = vol[2]/(vol[2]+vol[1]), 1-t = vol[1]/(vol[2]+vol[1])
+y = -vol[2]/vol[1]*(x - ret[1]) + ret[2]
+plot(x,y)
+cov(matrix(c(x,y),ncol = 2))
+cor(matrix(c(x,y),ncol = 2))
+u = vol[2]*x + vol[1]*y # lock in vol[2]*x + vol[1]*y 
+#abs(sp) = 1 => v= abs(vol[1]*t+sig*vol[2]*(1-t)) => straight lines,v would hit 0 with some t
+
+
+#vary sp
+sp.t = seq(-1,1,0.02)
+p.t = (-sp.t*vol[1]*vol[2]+vol[2]^2)/(vol[1]^2+vol[2]^2-2*sp.t*vol[1]*vol[2])
+plot(sp.t,p.t)
+##p.t = 0 => sp.t = vol[2]/vol[1]
+##p.t = 1 => sp.t = vol[1]/vol[2]
+## if sp > min(vol[2]/vol[1],vol[1]/vol[2]), t will be outside of [0,1], the min.v point is not between
+
+```
+
+
