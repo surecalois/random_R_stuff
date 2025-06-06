@@ -1,0 +1,64 @@
+---
+title: "rmd_test"
+author: "surecalois"
+date: '2025-05-16'
+output: html_document
+params:
+  well: "string"
+  hello: "whatever"
+  outfile: "just to show you the filename -> "
+knit: (function(input,...){
+      wow = rmarkdown::yaml_front_matter(input);
+      wow$params$outfile = paste0(wow$params$outfile,basename(input),"_",wow$params$well,'.html');
+      rmarkdown::render(
+        input,
+        output_file = paste0(xfun::sans_ext(input),"_",wow$params$well,'.html'),
+        params = wow$params
+      )
+    })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+params
+```
+
+
+# how it is done
+
+```{yaml}
+output: html_document
+params:
+  well: "string"
+  hello: "whatever"
+  outfile: "just to show you the filename -> "
+knit: (function(input,...){
+      wow = rmarkdown::yaml_front_matter(input);
+      wow$params$outfile = paste0(wow$params$outfile,basename(input),"_",wow$params$well,'.html');
+      rmarkdown::render(
+        input,
+        output_file = paste0(xfun::sans_ext(input),"_",wow$params$well,'.html'),
+        params = wow$params
+      )
+    })
+```
+
+# in contrast, this doesn't work
+
+```{ymal}
+params:
+  well: "string"
+knit: (function(input,...) {
+    params=list(...);
+    well=params$well;
+    rmarkdown::render(
+      input,
+      output_file = paste0(basename(input),"_",well,'.html'),
+      params = params
+    )
+  })
+```
+
